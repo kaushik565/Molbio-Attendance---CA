@@ -490,13 +490,13 @@ export const RosterManager: React.FC<RosterManagerProps> = ({ supervisors = [], 
           let shift: 'A' | 'B' | 'C' | 'General' = 'General';
           const normName = sheetName.trim().toUpperCase();
 
-          if (normName === 'A' || normName.includes('SHIFT A') || normName.includes('SHIFT_A') || normName.includes('A SHIFT') || normName.includes('A-SHIFT')) {
+          if (normName === 'A' || normName === '1' || normName.includes('SHIFT A') || normName.includes('SHIFT_A') || normName.includes('A SHIFT') || normName.includes('A-SHIFT') || normName.includes('SHIFT 1')) {
             shift = 'A';
-          } else if (normName === 'B' || normName.includes('SHIFT B') || normName.includes('SHIFT_B') || normName.includes('B SHIFT') || normName.includes('B-SHIFT')) {
+          } else if (normName === 'B' || normName === '2' || normName.includes('SHIFT B') || normName.includes('SHIFT_B') || normName.includes('B SHIFT') || normName.includes('B-SHIFT') || normName.includes('SHIFT 2')) {
             shift = 'B';
-          } else if (normName === 'C' || normName.includes('SHIFT C') || normName.includes('SHIFT_C') || normName.includes('C SHIFT') || normName.includes('C-SHIFT')) {
+          } else if (normName === 'C' || normName === '3' || normName.includes('SHIFT C') || normName.includes('SHIFT_C') || normName.includes('C SHIFT') || normName.includes('C-SHIFT') || normName.includes('SHIFT 3')) {
             shift = 'C';
-          } else if (normName.includes('GENERAL') || normName === 'G' || normName.includes('GEN') || normName.includes('GEN-SHIFT')) {
+          } else if (normName.includes('GENERAL') || normName === 'G' || normName.includes('GEN') || normName.includes('GEN-SHIFT') || normName.includes('SHIFT G')) {
             shift = 'General';
           } else {
             // Default shift when sheet names are generic (Sheet1, Sheet2, etc.)
