@@ -19,6 +19,7 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
   };
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [markedRecords, setMarkedRecords] = useState<Record<string, 'P' | 'A'>>({});
+  const [savedRecords, setSavedRecords] = useState<Set<string>>(new Set());
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
   const [selectedShift, setSelectedShift] = useState<'A' | 'B' | 'C' | 'General'>('A');
   const [attendanceDate, setAttendanceDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -57,10 +58,13 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
       // 2. Fetch existing logs for the selected date
       const existingLogs = await dbService.getAttendanceByDate(attendanceDate);
       const recordsMap: Record<string, 'P' | 'A'> = {};
+      const savedSet = new Set<string>();
       existingLogs.forEach((log) => {
         recordsMap[log.employee_id] = log.status;
+        savedSet.add(log.employee_id);
       });
       setMarkedRecords(recordsMap);
+      setSavedRecords(savedSet);
       setSelectedEmpIds(new Set());
     } catch (err: any) {
       console.error(err);
@@ -125,6 +129,7 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
   // Status marking handlers
   const markSingleStatus = (empId: string, status: 'P' | 'A') => {
     if (!canMarkCurrentTab) return;
+    if (currentUser.role !== 'admin' && savedRecords.has(empId)) return;
     setMarkedRecords(prev => ({
       ...prev,
       [empId]: status
@@ -136,6 +141,7 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
     setMarkedRecords(prev => {
       const next = { ...prev };
       selectedEmpIds.forEach(id => {
+        if (currentUser.role !== 'admin' && savedRecords.has(id)) return;
         next[id] = status;
       });
       return next;
@@ -148,6 +154,7 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
     setMarkedRecords(prev => {
       const next = { ...prev };
       filteredEmployees.forEach(emp => {
+        if (currentUser.role !== 'admin' && savedRecords.has(emp.id)) return;
         // Only mark if they haven't been manually marked yet
         if (!prev[emp.id]) {
           next[emp.id] = status;
@@ -179,6 +186,11 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
       }
 
       await dbService.saveAttendanceBulk(attendanceDate, recordsToSave, currentUser.id);
+      setSavedRecords(prev => {
+        const next = new Set(prev);
+        recordsToSave.forEach(r => next.add(r.employee_id));
+        return next;
+      });
       setMessage({ type: 'success', text: `Roster for ${getShiftLabel(selectedShift)} saved successfully!` });
       
       // Auto-hide success message after 5 seconds
@@ -459,6 +471,7 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
                 {filteredEmployees.map((emp) => {
                   const status = markedRecords[emp.id];
                   const isSelected = selectedEmpIds.has(emp.id);
+                  const isLocked = currentUser.role !== 'admin' && savedRecords.has(emp.id);
 
                   return (
                     <tr
@@ -472,8 +485,9 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
                       {canMarkCurrentTab && (
                         <td style={{ padding: '12px 20px' }}>
                           <button
-                            onClick={() => handleSelectToggle(emp.id)}
-                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', color: isSelected ? 'var(--accent-color)' : 'var(--text-muted)' }}
+                            onClick={() => !isLocked && handleSelectToggle(emp.id)}
+                            disabled={isLocked}
+                            style={{ border: 'none', background: 'transparent', cursor: isLocked ? 'not-allowed' : 'pointer', display: 'flex', color: isLocked ? 'var(--text-muted)' : (isSelected ? 'var(--accent-color)' : 'var(--text-muted)'), opacity: isLocked ? 0.3 : 1 }}
                           >
                             {isSelected ? <CheckSquare size={18} /> : <Square size={18} />}
                           </button>
@@ -499,7 +513,10 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
                       </td>
                       {canMarkCurrentTab && (
                         <td style={{ padding: '12px 20px', textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '6px' }}>
+                          {isLocked ? (
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Locked</span>
+                          ) : (
+                            <div style={{ display: 'inline-flex', gap: '6px' }}>
                             <button
                               onClick={() => markSingleStatus(emp.id, 'P')}
                               style={{
@@ -539,6 +556,7 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
                               <X size={16} />
                             </button>
                           </div>
+                          )}
                         </td>
                       )}
                     </tr>
