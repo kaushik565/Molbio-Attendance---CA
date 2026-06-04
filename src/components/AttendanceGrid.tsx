@@ -575,11 +575,11 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
           <button
             className="btn btn-primary"
             onClick={handleSaveAttendance}
-            disabled={saveLoading || shiftMarkedCount === 0}
+            disabled={saveLoading || shiftMarkedCount === 0 || unsavedMarkedCount === 0}
             style={{ width: '100%', maxWidth: '240px', padding: '12px 24px', fontSize: '0.95rem' }}
           >
             <Save size={18} />
-            <span>{saveLoading ? 'Submitting...' : 'Submit Register'}</span>
+            <span>{saveLoading ? 'Submitting...' : (unsavedMarkedCount === 0 && shiftMarkedCount > 0 ? 'All Submitted' : 'Submit Register')}</span>
           </button>
         </div>
       )}
