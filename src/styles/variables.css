@@ -1,0 +1,111 @@
+/* Design Tokens and Themes Configuration */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  /* Typography */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+
+  /* Common Spacing & Dimensions */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Status HSL Values (For alpha overlays) */
+  --present-h: 142;
+  --present-s: 72%;
+  --present-l: 50%;
+  
+  --absent-h: 350;
+  --absent-s: 89%;
+  --absent-l: 60%;
+  
+  --warn-h: 38;
+  --warn-s: 92%;
+  --warn-l: 50%;
+
+  --info-h: 217;
+  --info-s: 91%;
+  --info-l: 60%;
+}
+
+/* Light Theme Variables */
+:root[data-theme='light'] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  
+  --card-bg: rgba(255, 255, 255, 0.8);
+  --card-border: rgba(226, 232, 240, 0.8);
+  --card-shadow: 0 10px 30px -10px rgba(148, 163, 184, 0.15), 0 1px 3px rgba(148, 163, 184, 0.05);
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  
+  --accent-color: #6366f1; /* Indigo */
+  --accent-hover: #4f46e5;
+  --accent-glow: rgba(99, 102, 241, 0.15);
+
+  --border-color: #e2e8f0;
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  
+  /* Status Colors */
+  --color-present: hsl(var(--present-h), var(--present-s), 40%);
+  --bg-present: hsla(var(--present-h), var(--present-s), 45%, 0.1);
+  
+  --color-absent: hsl(var(--absent-h), var(--absent-s), 48%);
+  --bg-absent: hsla(var(--absent-h), var(--absent-s), 50%, 0.1);
+  
+  --color-unmarked: #64748b;
+  --bg-unmarked: #f1f5f9;
+
+  --color-info: hsl(var(--info-h), var(--info-s), 45%);
+  --bg-info: hsla(var(--info-h), var(--info-s), 50%, 0.1);
+
+  --glass-blur: blur(12px);
+}
+
+/* Dark Theme Variables (Default) */
+:root, :root[data-theme='dark'] {
+  --bg-primary: #090d16;
+  --bg-secondary: #0f172a;
+  --bg-tertiary: #1e293b;
+  
+  --card-bg: rgba(15, 23, 42, 0.65);
+  --card-border: rgba(255, 255, 255, 0.06);
+  --card-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5), 0 1px 0px rgba(255, 255, 255, 0.05) inset;
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  
+  --accent-color: #818cf8; /* Light Indigo */
+  --accent-hover: #6366f1;
+  --accent-glow: rgba(129, 140, 248, 0.25);
+
+  --border-color: #1e293b;
+  --input-bg: #0f172a;
+  --input-border: #334155;
+  
+  /* Status Colors */
+  --color-present: hsl(var(--present-h), var(--present-s), 55%);
+  --bg-present: hsla(var(--present-h), var(--present-s), 50%, 0.15);
+  
+  --color-absent: hsl(var(--absent-h), var(--absent-s), 65%);
+  --bg-absent: hsla(var(--absent-h), var(--absent-s), 60%, 0.15);
+  
+  --color-unmarked: #94a3b8;
+  --bg-unmarked: #1e293b;
+
+  --color-info: hsl(var(--info-h), var(--info-s), 65%);
+  --bg-info: hsla(var(--info-h), var(--info-s), 60%, 0.15);
+
+  --glass-blur: blur(20px);
+}
