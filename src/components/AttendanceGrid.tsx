@@ -107,6 +107,7 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
   const shiftPresentCount = shiftEmployees.filter(emp => markedRecords[emp.id] === 'P').length;
   const shiftAbsentCount = shiftEmployees.filter(emp => markedRecords[emp.id] === 'A').length;
   const shiftPercent = shiftMarkedCount > 0 ? Math.round((shiftPresentCount / shiftMarkedCount) * 100) : 0;
+  const unsavedMarkedCount = shiftEmployees.filter(emp => markedRecords[emp.id] && !savedRecords.has(emp.id)).length;
 
   // Selection toggle helpers
   const handleSelectToggle = (empId: string) => {
@@ -350,11 +351,11 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
           <button
             className="btn btn-primary"
             onClick={handleSaveAttendance}
-            disabled={saveLoading || shiftMarkedCount === 0}
+            disabled={saveLoading || shiftMarkedCount === 0 || unsavedMarkedCount === 0}
             style={{ minWidth: '150px' }}
           >
             <Save size={16} />
-            <span>{saveLoading ? 'Saving...' : 'Save Attendance'}</span>
+            <span>{saveLoading ? 'Saving...' : (unsavedMarkedCount === 0 && shiftMarkedCount > 0 ? 'All Saved' : 'Save Attendance')}</span>
           </button>
         )}
       </div>
