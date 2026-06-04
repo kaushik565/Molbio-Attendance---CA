@@ -148,7 +148,10 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
     setMarkedRecords(prev => {
       const next = { ...prev };
       filteredEmployees.forEach(emp => {
-        next[emp.id] = status;
+        // Only mark if they haven't been manually marked yet
+        if (!prev[emp.id]) {
+          next[emp.id] = status;
+        }
       });
       return next;
     });
@@ -396,15 +399,17 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
               className="btn btn-secondary"
               onClick={() => markAllStatus('P')}
               style={{ fontSize: '0.8rem', padding: '6px 12px', height: '38px' }}
+              title="Mark all unmarked employees as Present"
             >
-              All Present
+              Remaining Present
             </button>
             <button
               className="btn btn-secondary"
               onClick={() => markAllStatus('A')}
               style={{ fontSize: '0.8rem', padding: '6px 12px', height: '38px', color: 'var(--color-absent)' }}
+              title="Mark all unmarked employees as Absent"
             >
-              All Absent
+              Remaining Absent
             </button>
           </div>
         )}
