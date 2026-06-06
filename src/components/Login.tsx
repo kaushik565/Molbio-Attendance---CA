@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogIn, Key, User } from 'lucide-react';
+import { Key, User } from 'lucide-react';
 import { dbService } from '../lib/supabase';
 import logoUrl from '../assets/molbio_logo.png';
 
@@ -47,7 +47,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       <div className="glass-card" style={{ width: '100%', maxWidth: '440px', padding: '32px' }}>
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <img src={logoUrl} alt="Molbio Logo" style={{ height: '60px', marginBottom: '16px' }} />
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '6px' }}>Molbio Roster Desk</h2>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '6px' }}>Cartridge Assembly Operator Tracker</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
             Sign in to track production floor attendance
           </p>
