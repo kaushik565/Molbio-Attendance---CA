@@ -12,6 +12,10 @@ interface SummaryRow {
   totalDays: number;
   presentDays: number;
   absentDays: number;
+  approvedLeaveDays: number;
+  unapprovedLeaveDays: number;
+  approvedShiftChangeDays: number;
+  unapprovedShiftChangeDays: number;
   unmarkedDays: number;
   rate: number;
 }
@@ -107,10 +111,10 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ supervisors = []
 
   // Aggregate stats per employee
   const reportRows = useMemo(() => {
-    const markedMap: Record<string, Record<string, 'P' | 'A'>> = {}; // employeeId -> date -> status
+    const markedMap: Record<string, Record<string, { status: string, remarks?: string }>> = {}; // employeeId -> date -> status/remarks
     attendance.forEach(att => {
       if (!markedMap[att.employee_id]) markedMap[att.employee_id] = {};
-      markedMap[att.employee_id][att.date] = att.status;
+      markedMap[att.employee_id][att.date] = { status: att.status, remarks: (att as any).remarks };
     });
 
     // Get list of unique dates marked in range
@@ -123,17 +127,34 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ supervisors = []
         const empDates = markedMap[emp.id] || {};
         let present = 0;
         let absent = 0;
+        let approvedLeave = 0;
+        let unapprovedLeave = 0;
+        let approvedShiftChange = 0;
+        let unapprovedShiftChange = 0;
         let unmarked = 0;
 
         uniqueDates.forEach(date => {
-          const status = empDates[date];
-          if (status === 'P') present++;
-          else if (status === 'A') absent++;
-          else unmarked++;
+          const record = empDates[date];
+          if (!record) {
+            unmarked++;
+          } else {
+            if (record.status === 'P') {
+              present++;
+              if (record.remarks?.startsWith('Approved Shift Change')) approvedShiftChange++;
+              if (record.remarks?.startsWith('Unapproved Shift Change')) unapprovedShiftChange++;
+            } else if (record.status === 'A') {
+              absent++;
+              if (record.remarks === 'Approved Leave') approvedLeave++;
+              if (record.remarks === 'Unapproved Leave') unapprovedLeave++;
+            }
+          }
         });
 
+        // "Present" rate calculation:
+        // Out of all marked days (present + absent), what is their positive rate?
+        // Let's say positive days = present + approved leave
         const markedCount = present + absent;
-        const rate = markedCount > 0 ? Math.round((present / markedCount) * 100) : 0;
+        const rate = markedCount > 0 ? Math.round(((present + approvedLeave) / markedCount) * 100) : 0;
 
         return {
           id: emp.id,
@@ -143,6 +164,10 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ supervisors = []
           totalDays: totalDatesCount,
           presentDays: present,
           absentDays: absent,
+          approvedLeaveDays: approvedLeave,
+          unapprovedLeaveDays: unapprovedLeave,
+          approvedShiftChangeDays: approvedShiftChange,
+          unapprovedShiftChangeDays: unapprovedShiftChange,
           unmarkedDays: unmarked,
           rate
         };
@@ -236,7 +261,7 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ supervisors = []
         [`Date Range: ${fromDate} to ${toDate}`],
         [`Filtered Shift: ${selectedShift === 'All' ? 'All Shifts' : getShiftLabel(selectedShift)}`],
         [], // empty spacer row
-        ['Employee ID', 'Name', 'Shift', 'Role', 'Total Registry Days', 'Present Days', 'Absent Days', 'Unmarked Days', 'Attendance Rate %']
+        ['Employee ID', 'Name', 'Shift', 'Role', 'Total Registry Days', 'Present', 'Absent', 'Approved Leave', 'Unapproved Leave', 'Approved Shift Change', 'Unapproved Shift Change', 'Unmarked', 'Attendance Rate %']
       ];
 
       const summaryBody = reportRows.map(row => [
@@ -247,6 +272,10 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ supervisors = []
         row.totalDays,
         row.presentDays,
         row.absentDays,
+        row.approvedLeaveDays,
+        row.unapprovedLeaveDays,
+        row.approvedShiftChangeDays,
+        row.unapprovedShiftChangeDays,
         row.unmarkedDays,
         `${row.rate}%`
       ]);
@@ -254,13 +283,17 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ supervisors = []
       // Calculate Averages for Summary Footer
       const totalPresent = reportRows.reduce((acc, r) => acc + r.presentDays, 0);
       const totalAbsent = reportRows.reduce((acc, r) => acc + r.absentDays, 0);
+      const totalAppLeave = reportRows.reduce((acc, r) => acc + r.approvedLeaveDays, 0);
+      const totalUnappLeave = reportRows.reduce((acc, r) => acc + r.unapprovedLeaveDays, 0);
+      const totalAppSC = reportRows.reduce((acc, r) => acc + r.approvedShiftChangeDays, 0);
+      const totalUnappSC = reportRows.reduce((acc, r) => acc + r.unapprovedShiftChangeDays, 0);
       const totalUnmarked = reportRows.reduce((acc, r) => acc + r.unmarkedDays, 0);
       const totalMarked = totalPresent + totalAbsent;
-      const averageRate = totalMarked > 0 ? Math.round((totalPresent / totalMarked) * 100) : 0;
+      const averageRate = totalMarked > 0 ? Math.round(((totalPresent + totalAppLeave) / totalMarked) * 100) : 0;
 
       const summaryFooter = [
         [], // empty
-        ['TOTAL AVERAGE SUMMARY', '', '', '', '', totalPresent, totalAbsent, totalUnmarked, `${averageRate}%`]
+        ['TOTAL AVERAGE SUMMARY', '', '', '', '', totalPresent, totalAbsent, totalAppLeave, totalUnappLeave, totalAppSC, totalUnappSC, totalUnmarked, `${averageRate}%`]
       ];
 
       const wsSummaryData = [...summaryHeader, ...summaryBody, ...summaryFooter];
@@ -274,7 +307,9 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ supervisors = []
         { wch: 20 }, // Role
         { wch: 20 }, // Total Registry Days
         { wch: 15 }, // Present
-        { wch: 15 }, // Absent
+        { wch: 20 }, // Absent
+        { wch: 20 }, // Leave
+        { wch: 25 }, // USC
         { wch: 15 }, // Unmarked
         { wch: 20 }  // Rate
       ];
@@ -289,15 +324,15 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ supervisors = []
       const matrixHeaders = ['Employee ID', 'Name', 'Shift', 'Role', ...dates];
       const matrixHeaderRow = [matrixHeaders];
 
-      // Build employee database rows
-      const markedMap: Record<string, Record<string, 'P' | 'A'>> = {};
+      const matrixMarkedMap: Record<string, Record<string, string>> = {};
       attendance.forEach(att => {
-        if (!markedMap[att.employee_id]) markedMap[att.employee_id] = {};
-        markedMap[att.employee_id][att.date] = att.status;
+        if (!matrixMarkedMap[att.employee_id]) matrixMarkedMap[att.employee_id] = {};
+        const remarks = (att as any).remarks;
+        matrixMarkedMap[att.employee_id][att.date] = remarks ? `${att.status} (${remarks})` : att.status;
       });
 
       const matrixBody = reportRows.map(row => {
-        const empDates = markedMap[row.id] || {};
+        const empDates = matrixMarkedMap[row.id] || {};
         const dateStatuses = dates.map(d => empDates[d] || '-');
         return [
           row.id,
@@ -329,6 +364,67 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ supervisors = []
       wsMatrix['!cols'] = matrixCols;
 
       XLSX.utils.book_append_sheet(wb, wsMatrix, 'Daily Registry Grid');
+
+      // --- SHEET 3: APPROVED LEAVES ---
+      const appLeavesData = [
+        ['APPROVED LEAVES LIST'],
+        [`Date Range: ${fromDate} to ${toDate}`],
+        [],
+        ['Date', 'Employee ID', 'Name', 'Shift', 'Role']
+      ];
+      // --- SHEET 4: UNAPPROVED LEAVES ---
+      const unappLeavesData = [
+        ['UNAPPROVED LEAVES LIST (ABSENCES)'],
+        [`Date Range: ${fromDate} to ${toDate}`],
+        [],
+        ['Date', 'Employee ID', 'Name', 'Shift', 'Role']
+      ];
+      // --- SHEET 5: APPROVED SHIFT CHANGES ---
+      const appSCData = [
+        ['APPROVED SHIFT CHANGES LIST'],
+        [`Date Range: ${fromDate} to ${toDate}`],
+        [],
+        ['Date', 'Employee ID', 'Name', 'Expected Shift', 'Role']
+      ];
+      // --- SHEET 6: UNAPPROVED SHIFT CHANGES ---
+      const unappSCData = [
+        ['UNAPPROVED SHIFT CHANGES LIST'],
+        [`Date Range: ${fromDate} to ${toDate}`],
+        [],
+        ['Date', 'Employee ID', 'Name', 'Expected Shift', 'Role']
+      ];
+
+      attendance.forEach(att => {
+        const remarks = (att as any).remarks;
+        if (remarks) {
+          const emp = employees.find(e => e.id === att.employee_id);
+          if (emp && (selectedShift === 'All' || emp.shift === selectedShift)) {
+            const rowData = [att.date, emp.id, emp.name, emp.shift, emp.role];
+            if (remarks === 'Approved Leave') appLeavesData.push(rowData);
+            else if (remarks === 'Unapproved Leave') unappLeavesData.push(rowData);
+            else if (remarks.startsWith('Approved Shift Change')) appSCData.push(rowData);
+            else if (remarks.startsWith('Unapproved Shift Change')) unappSCData.push(rowData);
+          }
+        }
+      });
+
+      const colsArr = [{ wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 20 }];
+
+      const wsAppLeaves = XLSX.utils.aoa_to_sheet(appLeavesData);
+      wsAppLeaves['!cols'] = colsArr;
+      XLSX.utils.book_append_sheet(wb, wsAppLeaves, 'Approved Leaves');
+
+      const wsUnappLeaves = XLSX.utils.aoa_to_sheet(unappLeavesData);
+      wsUnappLeaves['!cols'] = colsArr;
+      XLSX.utils.book_append_sheet(wb, wsUnappLeaves, 'Unapproved Leaves');
+
+      const wsAppSC = XLSX.utils.aoa_to_sheet(appSCData);
+      wsAppSC['!cols'] = colsArr;
+      XLSX.utils.book_append_sheet(wb, wsAppSC, 'Approved Shift Changes');
+
+      const wsUnappSC = XLSX.utils.aoa_to_sheet(unappSCData);
+      wsUnappSC['!cols'] = colsArr;
+      XLSX.utils.book_append_sheet(wb, wsUnappSC, 'Unapproved Shift Changes');
 
       // Write Workbook to file
       XLSX.writeFile(wb, `Cartridge_Attendance_Report_${fromDate}_to_${toDate}.xlsx`);

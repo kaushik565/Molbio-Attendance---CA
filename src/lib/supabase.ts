@@ -37,8 +37,16 @@ export interface AttendanceRecord {
   employee_id: string;
   date: string;
   status: 'P' | 'A';
+  remarks?: string; // e.g., 'Approved Leave', 'Approved Shift Change (to Shift X)'
   marked_by?: string;
   marked_at?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
 }
 
 // ----------------------------------------------------
@@ -49,6 +57,7 @@ const MOCK_STORAGE_KEYS = {
   ATTENDANCE: 'cartridge_roster_attendance',
   USERS: 'cartridge_roster_users_v2', // version update for schema shift
   CURRENT_USER: 'cartridge_roster_current_user_v2',
+  NOTIFICATIONS: 'cartridge_roster_notifications',
 };
 
 // Seed initial mock employees if empty (680 members across shifts)
@@ -844,6 +853,33 @@ export const dbService = {
     }
 
     return syncCount;
+  },
+
+  // --- NOTIFICATION SERVICES ---
+  async sendAdminNotification(message: string): Promise<void> {
+    const notification: AppNotification = {
+      id: crypto.randomUUID(),
+      message,
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+    const existing = localStorage.getItem(MOCK_STORAGE_KEYS.NOTIFICATIONS);
+    const list: AppNotification[] = existing ? JSON.parse(existing) : [];
+    list.push(notification);
+    localStorage.setItem(MOCK_STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list));
+  },
+
+  async getAdminNotifications(): Promise<AppNotification[]> {
+    const existing = localStorage.getItem(MOCK_STORAGE_KEYS.NOTIFICATIONS);
+    return existing ? JSON.parse(existing) : [];
+  },
+  
+  async markNotificationsRead(): Promise<void> {
+    const existing = localStorage.getItem(MOCK_STORAGE_KEYS.NOTIFICATIONS);
+    if (!existing) return;
+    const list: AppNotification[] = JSON.parse(existing);
+    list.forEach(n => n.read = true);
+    localStorage.setItem(MOCK_STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list));
   },
 
   resetMockDatabase(): void {

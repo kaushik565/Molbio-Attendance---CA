@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Key, User } from 'lucide-react';
 import { dbService } from '../lib/supabase';
 import logoUrl from '../assets/molbio_logo.png';
+import bgUrl from '../assets/dna_bg.png';
 
 
 interface LoginProps {
@@ -42,9 +43,29 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       justifyContent: 'center',
       minHeight: '100vh',
       padding: '20px',
-      background: 'radial-gradient(circle at center, var(--bg-secondary) 0%, var(--bg-primary) 100%)'
+      backgroundImage: `url(${bgUrl})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      position: 'relative'
     }}>
-      <div className="glass-card" style={{ width: '100%', maxWidth: '440px', padding: '32px' }}>
+      {/* Soft glassmorphism overlay to ensure the login card remains highly readable */}
+      <div style={{
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(255, 255, 255, 0.5)',
+        backdropFilter: 'blur(6px)',
+        zIndex: 0
+      }}></div>
+      
+      <div className="glass-card" style={{ 
+        width: '100%', 
+        maxWidth: '440px', 
+        padding: '32px', 
+        position: 'relative', 
+        zIndex: 1,
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255,255,255,0.5)',
+        backgroundColor: 'rgba(255, 255, 255, 0.85)'
+      }}>
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <img src={logoUrl} alt="Molbio Logo" style={{ height: '60px', marginBottom: '16px' }} />
           <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '6px' }}>Cartridge Assembly Operator Tracker</h2>

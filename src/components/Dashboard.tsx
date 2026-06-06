@@ -24,6 +24,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, currentUser, s
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord[]>([]);
   const [trendData, setTrendData] = useState<{ date: string; rate: number }[]>([]);
+  const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +79,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, currentUser, s
         }
       }
       setTrendData(past7DaysData);
+
+      // 4. Fetch admin notifications if admin
+      if (currentUser.role === 'admin') {
+        const notifs = await dbService.getAdminNotifications();
+        setAdminNotifications(notifs.filter(n => !n.read));
+      }
+
     } catch (err: any) {
       console.error(err);
       setError('Failed to load dashboard statistics.');
@@ -238,6 +246,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, currentUser, s
       {error && (
         <div className="glass-card" style={{ borderLeft: '4px solid var(--color-absent)', marginBottom: '24px', color: 'var(--color-absent)' }}>
           {error}
+        </div>
+      )}
+
+      {/* Admin Notifications */}
+      {currentUser.role === 'admin' && adminNotifications.length > 0 && (
+        <div className="glass-card" style={{ borderLeft: '4px solid var(--color-absent)', marginBottom: '24px', background: 'var(--bg-secondary)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-absent)' }}>System Alerts ({adminNotifications.length})</h3>
+            <button 
+              className="btn btn-secondary" 
+              style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+              onClick={async () => {
+                await dbService.markNotificationsRead();
+                setAdminNotifications([]);
+              }}
+            >
+              Dismiss All
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {adminNotifications.map(n => (
+              <div key={n.id} style={{ padding: '12px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', fontSize: '0.9rem' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginRight: '8px' }}>{new Date(n.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                {n.message}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

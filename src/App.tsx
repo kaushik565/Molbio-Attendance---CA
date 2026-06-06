@@ -141,7 +141,7 @@ function App() {
         color: '#f8fafc'
       }}>
         <div style={{ textAlign: 'center' }}>
-          <h2 style={{ fontWeight: 800, fontSize: '1.25rem', marginBottom: '8px' }}>Molbio Roster Desk</h2>
+          <h2 style={{ fontWeight: 800, fontSize: '1.25rem', marginBottom: '8px' }}>Cartridge Assembly Operator Tracker</h2>
           <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Loading floor database...</p>
         </div>
       </div>

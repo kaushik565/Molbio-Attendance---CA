@@ -19,9 +19,10 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
   };
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [markedRecords, setMarkedRecords] = useState<Record<string, 'P' | 'A'>>({});
+  const [recordRemarks, setRecordRemarks] = useState<Record<string, string>>({});
   const [savedRecords, setSavedRecords] = useState<Set<string>>(new Set());
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
-  const [selectedShift, setSelectedShift] = useState<'A' | 'B' | 'C' | 'General'>('A');
+  const [selectedShift, setSelectedShift] = useState<'A' | 'B' | 'C' | 'General' | 'All'>('A');
   const [attendanceDate, setAttendanceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -32,6 +33,15 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
   // Biometric state variables
   const [showBiometricPanel, setShowBiometricPanel] = useState(false);
   const [biometricInput, setBiometricInput] = useState('');
+
+  // Review Modal state variables
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [missingEmployees, setMissingEmployees] = useState<Employee[]>([]);
+  const [crossShiftEmployees, setCrossShiftEmployees] = useState<Employee[]>([]);
+  const [duplicateEmployees, setDuplicateEmployees] = useState<Employee[]>([]);
+  const [reviewStatusMap, setReviewStatusMap] = useState<Record<string, 'Approved Leave' | 'Unapproved Leave'>>({});
+  const [reviewShiftChangeMap, setReviewShiftChangeMap] = useState<Record<string, string>>({});
+  const [pendingPastedPresent, setPendingPastedPresent] = useState<string[]>([]);
 
   // Check if supervisor's access is restricted to their assigned shift
   const canMarkAllShifts = currentUser.role === 'admin' || currentUser.assigned_shift === 'All';
@@ -61,13 +71,18 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
 
       // 2. Fetch existing logs for the selected date
       const existingLogs = await dbService.getAttendanceByDate(attendanceDate);
-      const recordsMap: Record<string, 'P' | 'A'> = {};
+      const loadedMarks: Record<string, 'P' | 'A'> = {};
+      const loadedRemarks: Record<string, any> = {};
       const savedSet = new Set<string>();
       existingLogs.forEach((log) => {
-        recordsMap[log.employee_id] = log.status;
+        loadedMarks[log.employee_id] = log.status as 'P' | 'A';
+        if (log.remarks) {
+          loadedRemarks[log.employee_id] = log.remarks;
+        }
         savedSet.add(log.employee_id);
       });
-      setMarkedRecords(recordsMap);
+      setMarkedRecords(loadedMarks);
+      setRecordRemarks(loadedRemarks);
       setSavedRecords(savedSet);
       setSelectedEmpIds(new Set());
     } catch (err: any) {
@@ -88,10 +103,34 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
     }
   }, [isActive]);
 
-  // Filter employees by selected shift
-  const shiftEmployees = useMemo(() => {
-    return employees.filter(emp => emp.shift === selectedShift);
+  // 1. All Base Roster for this tab
+  const baseEmployees = useMemo(() => {
+    return employees.filter(emp => selectedShift === 'All' || emp.shift === selectedShift);
   }, [employees, selectedShift]);
+
+  // 2. Outgoing (Base roster members who have shifted OUT to another shift today)
+  const outgoingIds = useMemo(() => {
+    if (selectedShift === 'All') return new Set<string>();
+    return new Set(baseEmployees.filter(emp => {
+      const remark = recordRemarks[emp.id] || '';
+      return remark.includes('Shift Change') && remark.includes('(to Shift ') && !remark.includes(`to Shift ${selectedShift}`);
+    }).map(e => e.id));
+  }, [baseEmployees, recordRemarks, selectedShift]);
+
+  // 3. Incoming (Employees from OTHER shifts who shifted INTO this shift today)
+  const incomingEmployees = useMemo(() => {
+    if (selectedShift === 'All') return [];
+    return employees.filter(emp => {
+      if (emp.shift === selectedShift) return false;
+      const remark = recordRemarks[emp.id] || '';
+      return remark.includes(`to Shift ${selectedShift}`);
+    });
+  }, [employees, selectedShift, recordRemarks]);
+
+  // 4. Final Display List (Base Roster + Incoming)
+  const shiftEmployees = useMemo(() => {
+    return [...baseEmployees, ...incomingEmployees];
+  }, [baseEmployees, incomingEmployees]);
 
   // Filter shift employees by search query
   const filteredEmployees = useMemo(() => {
@@ -106,10 +145,17 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
   const canMarkCurrentTab = currentUser.role === 'admin' || supervisorShift === 'All' || supervisorShift === selectedShift;
 
   // Stats for the current shift list
-  const shiftTotalCount = shiftEmployees.length;
-  const shiftMarkedCount = shiftEmployees.filter(emp => markedRecords[emp.id]).length;
-  const shiftPresentCount = shiftEmployees.filter(emp => markedRecords[emp.id] === 'P').length;
-  const shiftAbsentCount = shiftEmployees.filter(emp => markedRecords[emp.id] === 'A').length;
+  const shiftTotalCount = baseEmployees.length - outgoingIds.size + incomingEmployees.length;
+  
+  const activeInShiftIds = useMemo(() => new Set([
+    ...baseEmployees.map(e => e.id).filter(id => !outgoingIds.has(id)),
+    ...incomingEmployees.map(e => e.id)
+  ]), [baseEmployees, outgoingIds, incomingEmployees]);
+
+  const shiftMarkedCount = shiftEmployees.filter(emp => activeInShiftIds.has(emp.id) && markedRecords[emp.id]).length;
+  const shiftPresentCount = shiftEmployees.filter(emp => activeInShiftIds.has(emp.id) && markedRecords[emp.id] === 'P').length;
+  const shiftAbsentCount = shiftEmployees.filter(emp => activeInShiftIds.has(emp.id) && markedRecords[emp.id] === 'A').length;
+  const shiftChangedCount = incomingEmployees.length + outgoingIds.size;
   const shiftPercent = shiftMarkedCount > 0 ? Math.round((shiftPresentCount / shiftMarkedCount) * 100) : 0;
   const unsavedMarkedCount = shiftEmployees.filter(emp => markedRecords[emp.id] && !savedRecords.has(emp.id)).length;
 
@@ -139,6 +185,12 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
       ...prev,
       [empId]: status
     }));
+    // Clear remark if manually overwritten by simple toggle
+    setRecordRemarks(prev => {
+      const next = { ...prev };
+      delete next[empId];
+      return next;
+    });
   };
 
   const markSelectedStatus = (status: 'P' | 'A') => {
@@ -149,6 +201,11 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
         if (currentUser.role !== 'admin' && savedRecords.has(id)) return;
         next[id] = status;
       });
+      return next;
+    });
+    setRecordRemarks(prev => {
+      const next = { ...prev };
+      selectedEmpIds.forEach(id => { delete next[id]; });
       return next;
     });
     setSelectedEmpIds(new Set()); // Reset selections after action
@@ -167,6 +224,14 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
       });
       return next;
     });
+    setRecordRemarks(prev => {
+      const next = { ...prev };
+      filteredEmployees.forEach(emp => {
+        if (currentUser.role !== 'admin' && savedRecords.has(emp.id)) return;
+        delete next[emp.id];
+      });
+      return next;
+    });
   };
 
   // Biometric Processing Logic
@@ -175,31 +240,101 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
 
     // Parse pasted IDs, splitting by whitespace (spaces, newlines, tabs) or commas
     const pastedIds = biometricInput.split(/[\s,]+/).filter(id => id.trim() !== '');
-    const pastedIdsSet = new Set(pastedIds);
 
-    let presentCount = 0;
-    let absentCount = 0;
+    const missing: Employee[] = [];
+    const crossShift: Employee[] = [];
+    const duplicate: Employee[] = [];
+    const presentInShift: string[] = [];
+
+    // Map through all employees globally (not just filteredEmployees) to find cross-shift
+    const pastedEmpObjs = pastedIds.map(id => employees.find(e => e.id === id)).filter(Boolean) as Employee[];
+
+    pastedEmpObjs.forEach(emp => {
+      // Prevent double shifts: Check if they are already saved as Present today
+      if (markedRecords[emp.id] === 'P' && savedRecords.has(emp.id)) {
+        duplicate.push(emp);
+      } else if (emp.shift === selectedShift || selectedShift === 'All') {
+        presentInShift.push(emp.id);
+      } else {
+        crossShift.push(emp);
+      }
+    });
+
+    shiftEmployees.forEach(emp => {
+      if (currentUser.role !== 'admin' && savedRecords.has(emp.id)) return;
+      if (!presentInShift.includes(emp.id)) {
+        missing.push(emp);
+      }
+    });
+
+    setPendingPastedPresent(presentInShift);
+    setMissingEmployees(missing);
+    setCrossShiftEmployees(crossShift);
+    setDuplicateEmployees(duplicate);
+
+    if (duplicate.length > 0) {
+      dbService.sendAdminNotification(`Double-shift punch attempted by ${currentUser.username} (${currentUser.role}) for ${duplicate.length} employee(s) on ${attendanceDate}.`);
+      setMessage({ type: 'error', text: `Warning: ${duplicate.length} duplicate punches blocked. Admin notified.` });
+    }
+
+    // Initialize defaults for modal
+    const initialStatusMap: Record<string, 'Approved Leave' | 'Unapproved Leave'> = {};
+    missing.forEach(emp => {
+      initialStatusMap[emp.id] = 'Unapproved Leave'; // default to absent (unapproved)
+    });
+    setReviewStatusMap(initialStatusMap);
+
+    const initialShiftChangeMap: Record<string, string> = {};
+    crossShift.forEach(emp => {
+      initialShiftChangeMap[emp.id] = `Approved Shift Change (to Shift ${selectedShift})`;
+    });
+    setReviewShiftChangeMap(initialShiftChangeMap);
+
+    setShowReviewModal(true);
+  };
+
+  const confirmBiometricReview = async () => {
+    // Note: We no longer permanently update the employee's shift in DB.
+    // They are just marked present, with a note that they changed shifts.
 
     setMarkedRecords(prev => {
       const next = { ...prev };
       
-      // Process employees in the currently selected shift tab
-      filteredEmployees.forEach(emp => {
-        if (currentUser.role !== 'admin' && savedRecords.has(emp.id)) return; // skip locked
-        
-        if (pastedIdsSet.has(emp.id)) {
-          next[emp.id] = 'P';
-          presentCount++;
-        } else {
-          next[emp.id] = 'A';
-          absentCount++;
-        }
+      // Mark originally present in shift
+      pendingPastedPresent.forEach(id => {
+        next[id] = 'P';
       });
+
+      // Mark missing (A)
+      missingEmployees.forEach(emp => {
+        next[emp.id] = 'A';
+      });
+
+      // Mark cross-shift (P)
+      crossShiftEmployees.forEach(emp => {
+        next[emp.id] = 'P';
+      });
+
       return next;
     });
 
-    setMessage({ type: 'success', text: `Auto-filled: ${presentCount} Present, ${absentCount} Absent.` });
+    setRecordRemarks(prev => {
+      const next = { ...prev };
+
+      missingEmployees.forEach(emp => {
+        next[emp.id] = reviewStatusMap[emp.id];
+      });
+
+      crossShiftEmployees.forEach(emp => {
+        next[emp.id] = reviewShiftChangeMap[emp.id];
+      });
+
+      return next;
+    });
+
+    setMessage({ type: 'success', text: `Biometric attendance processed successfully!` });
     setTimeout(() => setMessage(null), 5000);
+    setShowReviewModal(false);
     setShowBiometricPanel(false);
     setBiometricInput('');
   };
@@ -211,12 +346,15 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
     setMessage(null);
 
     try {
-      // Build log items specifically for the employees in the current shift tab
-      const recordsToSave = shiftEmployees
-        .filter(emp => markedRecords[emp.id])
+      // Build log items specifically for the employees in the current shift tab,
+      // as well as any cross-shift employees processed during this session.
+      const crossShiftIds = crossShiftEmployees.map(e => e.id);
+      const recordsToSave = employees
+        .filter(emp => (emp.shift === selectedShift || crossShiftIds.includes(emp.id)) && markedRecords[emp.id])
         .map(emp => ({
           employee_id: emp.id,
-          status: markedRecords[emp.id]
+          status: markedRecords[emp.id],
+          remarks: recordRemarks[emp.id]
         }));
 
       if (recordsToSave.length === 0) {
@@ -379,6 +517,10 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
           <div>
             <span style={{ fontSize: '0.75rem', color: 'var(--color-absent)', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Absent</span>
             <strong style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-absent)' }}>{shiftAbsentCount}</strong>
+          </div>
+          <div>
+            <span style={{ fontSize: '0.75rem', color: '#f97316', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Shift Changed</span>
+            <strong style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f97316' }}>{shiftChangedCount}</strong>
           </div>
           <div>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Attendance Rate</span>
@@ -592,13 +734,28 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
                         {emp.role}
                       </td>
                       <td style={{ padding: '12px 20px' }}>
-                        {status === 'P' ? (
-                          <span className="badge badge-present">Present</span>
-                        ) : status === 'A' ? (
-                          <span className="badge badge-absent">Absent</span>
-                        ) : (
-                          <span className="badge badge-unmarked">Unmarked</span>
-                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {status === 'P' ? (
+                            <span className="badge badge-present">Present</span>
+                          ) : status === 'A' ? (
+                            <span className="badge badge-absent">Absent</span>
+                          ) : (
+                            <span className="badge badge-unmarked">Unmarked</span>
+                          )}
+                          {outgoingIds.has(emp.id) && (
+                            <span className="badge" style={{ backgroundColor: 'rgba(249, 115, 22, 0.15)', color: '#f97316' }}>
+                              {recordRemarks[emp.id]?.match(/\(to (Shift [A-C]|Shift General)\)/)?.[1] ? `Shift Changed ${recordRemarks[emp.id]?.match(/\(to (Shift [A-C]|Shift General)\)/)?.[0]}` : 'Shift Changed'}
+                            </span>
+                          )}
+                          {incomingEmployees.some(e => e.id === emp.id) && (
+                            <span className="badge" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+                              Cross-Shift (from {emp.shift})
+                            </span>
+                          )}
+                          {recordRemarks[emp.id] && recordRemarks[emp.id].includes('Leave') && (
+                            <span className="badge" style={{ backgroundColor: 'rgba(234, 179, 8, 0.15)', color: '#eab308' }}>Leave</span>
+                          )}
+                        </div>
                       </td>
                       {canMarkCurrentTab && (
                         <td style={{ padding: '12px 20px', textAlign: 'right' }}>
@@ -606,45 +763,31 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
                             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Locked</span>
                           ) : (
                             <div style={{ display: 'inline-flex', gap: '6px' }}>
-                            <button
-                              onClick={() => markSingleStatus(emp.id, 'P')}
-                              style={{
-                                width: '32px',
-                                height: '32px',
-                                borderRadius: '50%',
-                                border: '1px solid var(--border-color)',
-                                background: status === 'P' ? 'var(--color-present)' : 'var(--bg-primary)',
-                                color: status === 'P' ? 'white' : 'var(--text-secondary)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                transition: 'all var(--transition-fast)'
-                              }}
-                              title="Mark Present"
-                            >
-                              <Check size={16} />
-                            </button>
-                            <button
-                              onClick={() => markSingleStatus(emp.id, 'A')}
-                              style={{
-                                width: '32px',
-                                height: '32px',
-                                borderRadius: '50%',
-                                border: '1px solid var(--border-color)',
-                                background: status === 'A' ? 'var(--color-absent)' : 'var(--bg-primary)',
-                                color: status === 'A' ? 'white' : 'var(--text-secondary)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                transition: 'all var(--transition-fast)'
-                              }}
-                              title="Mark Absent"
-                            >
-                              <X size={16} />
-                            </button>
-                          </div>
+                              <button
+                                onClick={() => markSingleStatus(emp.id, 'P')}
+                                style={{
+                                  width: '32px', height: '32px', borderRadius: '50%', border: '1px solid var(--border-color)',
+                                  background: status === 'P' ? 'var(--color-present)' : 'var(--bg-primary)',
+                                  color: status === 'P' ? 'white' : 'var(--text-secondary)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all var(--transition-fast)'
+                                }}
+                                title="Mark Present"
+                              >
+                                <Check size={16} />
+                              </button>
+                              <button
+                                onClick={() => markSingleStatus(emp.id, 'A')}
+                                style={{
+                                  width: '32px', height: '32px', borderRadius: '50%', border: '1px solid var(--border-color)',
+                                  background: status === 'A' ? 'var(--color-absent)' : 'var(--bg-primary)',
+                                  color: status === 'A' ? 'white' : 'var(--text-secondary)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all var(--transition-fast)'
+                                }}
+                                title="Mark Absent"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
                           )}
                         </td>
                       )}
@@ -669,6 +812,138 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
             <Save size={18} />
             <span>{saveLoading ? 'Submitting...' : (unsavedMarkedCount === 0 && shiftMarkedCount > 0 ? 'All Submitted' : 'Submit Register')}</span>
           </button>
+        </div>
+      )}
+
+      {/* Review Modal */}
+      {showReviewModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', padding: '32px' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              Biometric Attendance Review
+            </h2>
+            
+            {missingEmployees.length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '12px', color: 'var(--color-absent)' }}>
+                  Missing Employees ({missingEmployees.length})
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                  These employees did not punch in. Mark them as Unapproved Absence (A) or Approved Leave (L).
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {missingEmployees.map(emp => (
+                    <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                      <div>
+                        <span style={{ fontWeight: 600, display: 'block', fontSize: '0.9rem' }}>{emp.name}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{emp.id}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          onClick={() => setReviewStatusMap(p => ({ ...p, [emp.id]: 'Unapproved Leave' }))}
+                          style={{
+                            padding: '4px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)',
+                            background: reviewStatusMap[emp.id] === 'Unapproved Leave' ? 'var(--color-absent)' : 'var(--bg-primary)',
+                            color: reviewStatusMap[emp.id] === 'Unapproved Leave' ? 'white' : 'var(--text-secondary)',
+                            cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600
+                          }}
+                        >
+                          Unapproved Leave
+                        </button>
+                        <button
+                          onClick={() => setReviewStatusMap(p => ({ ...p, [emp.id]: 'Approved Leave' }))}
+                          style={{
+                            padding: '4px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)',
+                            background: reviewStatusMap[emp.id] === 'Approved Leave' ? '#eab308' : 'var(--bg-primary)',
+                            color: reviewStatusMap[emp.id] === 'Approved Leave' ? 'white' : 'var(--text-secondary)',
+                            cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600
+                          }}
+                        >
+                          Approved Leave
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {crossShiftEmployees.length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '12px', color: '#f97316' }}>
+                  Cross-Shift Punches ({crossShiftEmployees.length})
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                  These employees punched in but belong to a different shift. Approve them to permanently move them to this shift, or Reject them (marks as USC).
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {crossShiftEmployees.map(emp => (
+                    <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                      <div>
+                        <span style={{ fontWeight: 600, display: 'block', fontSize: '0.9rem' }}>{emp.name}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{emp.id} (Shift {emp.shift})</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          onClick={() => setReviewShiftChangeMap(p => ({ ...p, [emp.id]: `Approved Shift Change (to Shift ${selectedShift})` }))}
+                          style={{
+                            padding: '4px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)',
+                            background: reviewShiftChangeMap[emp.id] === `Approved Shift Change (to Shift ${selectedShift})` ? 'var(--color-present)' : 'var(--bg-primary)',
+                            color: reviewShiftChangeMap[emp.id] === `Approved Shift Change (to Shift ${selectedShift})` ? 'white' : 'var(--text-secondary)',
+                            cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600
+                          }}
+                        >
+                          Approved Change
+                        </button>
+                        <button
+                          onClick={() => setReviewShiftChangeMap(p => ({ ...p, [emp.id]: `Unapproved Shift Change (to Shift ${selectedShift})` }))}
+                          style={{
+                            padding: '4px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)',
+                            background: reviewShiftChangeMap[emp.id] === `Unapproved Shift Change (to Shift ${selectedShift})` ? '#f97316' : 'var(--bg-primary)',
+                            color: reviewShiftChangeMap[emp.id] === `Unapproved Shift Change (to Shift ${selectedShift})` ? 'white' : 'var(--text-secondary)',
+                            cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600
+                          }}
+                        >
+                          Unapproved Change
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {duplicateEmployees.length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '12px', color: 'var(--color-absent)' }}>
+                  Duplicate Punches Ignored ({duplicateEmployees.length})
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                  These employees are already marked Present in another shift. Double shifts are not permitted.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {duplicateEmployees.map(emp => (
+                    <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                      <div>
+                        <span style={{ fontWeight: 600, display: 'block', fontSize: '0.9rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>{emp.name}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{emp.id} (Shift {emp.shift})</span>
+                      </div>
+                      <span className="badge badge-present" style={{ opacity: 0.5 }}>Already Present</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '32px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+              <button className="btn btn-secondary" onClick={() => setShowReviewModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={confirmBiometricReview}>Confirm Attendance</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
