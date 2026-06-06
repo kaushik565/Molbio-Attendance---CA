@@ -722,9 +722,11 @@ export const RosterManager: React.FC<RosterManagerProps> = ({ supervisors = [], 
         <div className="glass-card" style={{ padding: '24px', marginBottom: '24px', background: 'var(--bg-secondary)', borderLeft: '4px solid var(--accent-color)' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Shift Supervisor Configuration & Rotation Controls</h3>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>
+                {isAdmin ? 'Shift Supervisor Configuration & Rotation Controls' : 'Shift Rotation Controls'}
+              </h3>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Assign supervisors, manage fixed passwords, and execute weekly shift rotations.
+                {isAdmin ? 'Assign supervisors, manage fixed passwords, and execute weekly shift rotations.' : 'Execute weekly shift rotations.'}
               </p>
             </div>
             <button 
