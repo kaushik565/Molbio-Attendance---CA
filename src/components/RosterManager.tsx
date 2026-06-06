@@ -761,15 +761,19 @@ export const RosterManager: React.FC<RosterManagerProps> = ({ supervisors = [], 
               >
                 <div>
                   <span className="badge badge-info" style={{ marginBottom: '6px', display: 'inline-block' }}>{getShiftLabel(sup.assigned_shift)}</span>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                    Login: <strong style={{ color: 'var(--text-primary)' }}>{sup.username}</strong>
-                  </p>
+                  {isAdmin && (
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                      Login: <strong style={{ color: 'var(--text-primary)' }}>{sup.username}</strong>
+                    </p>
+                  )}
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                     Supervisor: <strong style={{ color: 'var(--text-primary)' }}>{sup.supervisor_name || 'Not Set'}</strong>
                   </p>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                    Password: <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{sup.password}</span>
-                  </p>
+                  {isAdmin && (
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      Password: <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{sup.password}</span>
+                    </p>
+                  )}
                 </div>
                 {isAdmin && (
                   <button 
