@@ -49,6 +49,13 @@ export interface AppNotification {
   read: boolean;
 }
 
+export interface ReactivationRequest {
+  employee_id: string;
+  requested_by: string; // supervisor username
+  requested_dates: string[]; // ISO date strings
+  status: 'pending' | 'resolved';
+}
+
 // ----------------------------------------------------
 // LOCAL STORAGE MOCK DB (For Demo/Offline-First)
 // ----------------------------------------------------
@@ -58,6 +65,7 @@ const MOCK_STORAGE_KEYS = {
   USERS: 'cartridge_roster_users_v2', // version update for schema shift
   CURRENT_USER: 'cartridge_roster_current_user_v2',
   NOTIFICATIONS: 'cartridge_roster_notifications',
+  REACTIVATION_REQUESTS: 'cartridge_roster_reactivation_requests',
 };
 
 // Seed initial mock employees if empty (680 members across shifts)
@@ -505,7 +513,22 @@ export const dbService = {
   },
 
   async importEmployeesBulk(newEmployees: Employee[]): Promise<void> {
+    const newEmpIds = new Set(newEmployees.map(e => e.id));
+    const allEmployees = await this.getEmployees();
+
     if (isSupabaseConfigured && supabase) {
+      // 1. Auto-deactivate missing employees
+      const missingEmps = allEmployees.filter(e => e.is_active && !newEmpIds.has(e.id));
+      if (missingEmps.length > 0) {
+        const deactivated = missingEmps.map(e => ({ ...e, is_active: false }));
+        const chunkSize = 100;
+        for (let i = 0; i < deactivated.length; i += chunkSize) {
+          const chunk = deactivated.slice(i, i + chunkSize);
+          await supabase.from('employees').upsert(chunk, { onConflict: 'id' });
+        }
+      }
+
+      // 2. Upsert new/updated employees
       const chunkSize = 100;
       for (let i = 0; i < newEmployees.length; i += chunkSize) {
         const chunk = newEmployees.slice(i, i + chunkSize);
@@ -515,8 +538,16 @@ export const dbService = {
         if (error) throw error;
       }
     } else {
-      const employees = await this.getEmployees();
-      const empMap = new Map(employees.map(e => [e.id, e]));
+      const empMap = new Map(allEmployees.map(e => [e.id, e]));
+      
+      // 1. Auto-deactivate missing
+      for (const [id, emp] of empMap.entries()) {
+        if (emp.is_active && !newEmpIds.has(id)) {
+          empMap.set(id, { ...emp, is_active: false });
+        }
+      }
+
+      // 2. Upsert new/updated
       newEmployees.forEach(emp => {
         empMap.set(emp.id, emp);
       });
@@ -880,6 +911,46 @@ export const dbService = {
     const list: AppNotification[] = JSON.parse(existing);
     list.forEach(n => n.read = true);
     localStorage.setItem(MOCK_STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(list));
+  },
+
+  // --- REACTIVATION SERVICES ---
+  async requestReactivation(employeeId: string, requestedBy: string, date: string): Promise<void> {
+    const existing = localStorage.getItem(MOCK_STORAGE_KEYS.REACTIVATION_REQUESTS);
+    const list: ReactivationRequest[] = existing ? JSON.parse(existing) : [];
+    
+    let req = list.find(r => r.employee_id === employeeId && r.status === 'pending');
+    if (req) {
+      if (!req.requested_dates.includes(date)) {
+        req.requested_dates.push(date);
+      }
+    } else {
+      list.push({
+        employee_id: employeeId,
+        requested_by: requestedBy,
+        requested_dates: [date],
+        status: 'pending'
+      });
+    }
+    
+    localStorage.setItem(MOCK_STORAGE_KEYS.REACTIVATION_REQUESTS, JSON.stringify(list));
+  },
+
+  async getPendingReactivations(): Promise<ReactivationRequest[]> {
+    const existing = localStorage.getItem(MOCK_STORAGE_KEYS.REACTIVATION_REQUESTS);
+    if (!existing) return [];
+    const list: ReactivationRequest[] = JSON.parse(existing);
+    return list.filter(r => r.status === 'pending');
+  },
+
+  async resolveReactivation(employeeId: string): Promise<void> {
+    const existing = localStorage.getItem(MOCK_STORAGE_KEYS.REACTIVATION_REQUESTS);
+    if (!existing) return;
+    const list: ReactivationRequest[] = JSON.parse(existing);
+    const req = list.find(r => r.employee_id === employeeId && r.status === 'pending');
+    if (req) {
+      req.status = 'resolved';
+      localStorage.setItem(MOCK_STORAGE_KEYS.REACTIVATION_REQUESTS, JSON.stringify(list));
+    }
   },
 
   resetMockDatabase(): void {

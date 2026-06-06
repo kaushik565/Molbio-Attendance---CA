@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Check, X, Search, CheckSquare, Square, Save, AlertCircle, Sparkles, Menu } from 'lucide-react';
+import { Check, X, Search, CheckSquare, Square, Save, AlertCircle, Sparkles, Menu, AlertTriangle } from 'lucide-react';
 import { dbService } from '../lib/supabase';
 import type { Employee } from '../lib/supabase';
 
@@ -39,6 +39,7 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
   const [missingEmployees, setMissingEmployees] = useState<Employee[]>([]);
   const [crossShiftEmployees, setCrossShiftEmployees] = useState<Employee[]>([]);
   const [duplicateEmployees, setDuplicateEmployees] = useState<Employee[]>([]);
+  const [deactivatedEmployees, setDeactivatedEmployees] = useState<Employee[]>([]);
   const [reviewStatusMap, setReviewStatusMap] = useState<Record<string, 'Approved Leave' | 'Unapproved Leave'>>({});
   const [reviewShiftChangeMap, setReviewShiftChangeMap] = useState<Record<string, string>>({});
   const [pendingPastedPresent, setPendingPastedPresent] = useState<string[]>([]);
@@ -244,14 +245,17 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
     const missing: Employee[] = [];
     const crossShift: Employee[] = [];
     const duplicate: Employee[] = [];
+    const deactivated: Employee[] = [];
     const presentInShift: string[] = [];
 
     // Map through all employees globally (not just filteredEmployees) to find cross-shift
     const pastedEmpObjs = pastedIds.map(id => employees.find(e => e.id === id)).filter(Boolean) as Employee[];
 
     pastedEmpObjs.forEach(emp => {
-      // Prevent double shifts: Check if they are already saved as Present today
-      if (markedRecords[emp.id] === 'P' && savedRecords.has(emp.id)) {
+      if (!emp.is_active) {
+        deactivated.push(emp);
+      } else if (markedRecords[emp.id] === 'P' && savedRecords.has(emp.id)) {
+        // Prevent double shifts: Check if they are already saved as Present today
         duplicate.push(emp);
       } else if (emp.shift === selectedShift || selectedShift === 'All') {
         presentInShift.push(emp.id);
@@ -271,6 +275,7 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
     setMissingEmployees(missing);
     setCrossShiftEmployees(crossShift);
     setDuplicateEmployees(duplicate);
+    setDeactivatedEmployees(deactivated);
 
     if (duplicate.length > 0) {
       dbService.sendAdminNotification(`Double-shift punch attempted by ${currentUser.username} (${currentUser.role}) for ${duplicate.length} employee(s) on ${attendanceDate}.`);
@@ -337,6 +342,18 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
     setShowReviewModal(false);
     setShowBiometricPanel(false);
     setBiometricInput('');
+  };
+
+  const handleRequestReactivation = async (emp: Employee) => {
+    try {
+      await dbService.requestReactivation(emp.id, currentUser.username, attendanceDate);
+      await dbService.sendAdminNotification(`Supervisor ${currentUser.username} requested reactivation for ${emp.name} (${emp.id}) from Shift ${selectedShift}.`);
+      setMessage({ type: 'success', text: `Reactivation requested for ${emp.name}.` });
+      setDeactivatedEmployees(prev => prev.filter(e => e.id !== emp.id));
+    } catch (err) {
+      console.error(err);
+      setMessage({ type: 'error', text: 'Failed to request reactivation.' });
+    }
   };
 
   // Save changes to database
@@ -936,6 +953,33 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {deactivatedEmployees.length > 0 && (
+              <div style={{ marginBottom: '24px', background: 'rgba(239, 68, 68, 0.05)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                <h4 style={{ color: '#ef4444', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertTriangle size={18} />
+                  Deactivated Employees Detected ({deactivatedEmployees.length})
+                </h4>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  These employees exist but are currently marked as inactive/resigned. They cannot be marked present until an Admin reactivates them.
+                </p>
+                {deactivatedEmployees.map(emp => (
+                  <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', marginBottom: '8px' }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{emp.id}</div>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{emp.name}</div>
+                    </div>
+                    <button 
+                      className="btn"
+                      style={{ background: '#ef4444', color: '#fff', fontSize: '0.8rem', padding: '6px 12px' }}
+                      onClick={() => handleRequestReactivation(emp)}
+                    >
+                      Request Reactivation
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 

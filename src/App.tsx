@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, CheckSquare, Users, FileSpreadsheet, LogOut, Sun, Moon, Database, ChevronLeft } from 'lucide-react';
+import { LayoutDashboard, Users, CheckSquare, LogOut, FileSpreadsheet, ChevronLeft, ShieldAlert, Sun, Moon, Database } from 'lucide-react';
 import { isSupabaseConfigured, dbService } from './lib/supabase';
 import type { Profile } from './lib/supabase';
 import { Login } from './components/Login';
@@ -7,6 +7,7 @@ import { Dashboard } from './components/Dashboard';
 import { AttendanceGrid } from './components/AttendanceGrid';
 import { RosterManager } from './components/RosterManager';
 import { ReportExporter } from './components/ReportExporter';
+import { InactiveStaffManager } from './components/InactiveStaffManager';
 
 import './styles/variables.css';
 import './styles/main.css';
@@ -91,11 +92,11 @@ function App() {
     if (currentUser) {
       fetchSupervisors();
     }
-  }, [currentUser]);
+  }, [currentUser?.role, currentUser?.assigned_shift]);
 
   // Auto-collapse sidebar whenever the active view/tab changes to keep the screen clean and wide
   useEffect(() => {
-    if (currentView === 'dashboard') {
+    if (currentView === 'dashboard' || currentView === 'inactive') {
       setSidebarHidden(false);
     } else {
       setSidebarHidden(true);
@@ -202,7 +203,7 @@ function App() {
                   cursor: 'pointer',
                   padding: '6px',
                   borderRadius: '50%',
-                  display: currentView === 'dashboard' ? 'none' : 'flex',
+                  display: (currentView === 'dashboard' || currentView === 'inactive') ? 'none' : 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   width: '28px',
@@ -262,6 +263,17 @@ function App() {
               <FileSpreadsheet size={20} />
               <span>Report Panel</span>
             </button>
+
+            {isAdmin && (
+              <button
+                onClick={() => setCurrentView('inactive')}
+                className={`nav-item ${currentView === 'inactive' ? 'active' : ''}`}
+                style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.05)' }}
+              >
+                <ShieldAlert size={20} />
+                <span>Inactive Staff</span>
+              </button>
+            )}
           </nav>
 
           {/* SIDEBAR FOOTER */}
@@ -351,6 +363,14 @@ function App() {
               onToggleSidebar={() => setSidebarHidden(false)}
             />
           </div>
+
+          {isAdmin && (
+            <div style={{ display: currentView === 'inactive' ? 'block' : 'none' }}>
+              <InactiveStaffManager 
+                currentUser={currentUser} 
+              />
+            </div>
+          )}
 
           <footer style={{
             textAlign: 'center',
