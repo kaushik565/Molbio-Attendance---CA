@@ -95,7 +95,11 @@ function App() {
 
   // Auto-collapse sidebar whenever the active view/tab changes to keep the screen clean and wide
   useEffect(() => {
-    setSidebarHidden(true);
+    if (currentView === 'dashboard') {
+      setSidebarHidden(false);
+    } else {
+      setSidebarHidden(true);
+    }
   }, [currentView]);
 
   // Handle Theme Toggle
@@ -198,7 +202,7 @@ function App() {
                   cursor: 'pointer',
                   padding: '6px',
                   borderRadius: '50%',
-                  display: 'flex',
+                  display: currentView === 'dashboard' ? 'none' : 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   width: '28px',
