@@ -15,7 +15,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
   const [supervisors, setSupervisors] = useState<Profile[]>([]);
   const [currentView, setCurrentView] = useState<string>('dashboard');
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light'>('light');
   const [loading, setLoading] = useState(true);
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? window.navigator.onLine : true);
@@ -65,7 +65,7 @@ function App() {
   useEffect(() => {
     // 1. Theme initialization
     const savedTheme = localStorage.getItem('cartridge_theme') as 'dark' | 'light' | null;
-    const initialTheme = savedTheme || 'dark';
+    const initialTheme = savedTheme || 'light';
     setTheme(initialTheme);
     document.documentElement.setAttribute('data-theme', initialTheme);
 

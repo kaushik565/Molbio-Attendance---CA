@@ -45,9 +45,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }}>
       <div className="glass-card" style={{ width: '100%', maxWidth: '440px', padding: '32px' }}>
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-          <div className="logo-icon" style={{ margin: '0 auto 16px auto', width: '56px', height: '56px' }}>
-            <LogIn size={28} />
-          </div>
+          <img src="/molbio_logo.png" alt="Molbio Logo" style={{ height: '60px', marginBottom: '16px' }} />
           <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '6px' }}>Molbio Roster Desk</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
             Sign in to track production floor attendance
