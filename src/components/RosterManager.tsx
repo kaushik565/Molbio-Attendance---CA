@@ -718,7 +718,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({ supervisors = [], 
       </div>
 
       {/* Supervisor Configuration & Shift Rotation Controls */}
-      {isAdmin && (
+      {(isAdmin || isSupervisor) && (
         <div className="glass-card" style={{ padding: '24px', marginBottom: '24px', background: 'var(--bg-secondary)', borderLeft: '4px solid var(--accent-color)' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <div>
@@ -771,15 +771,17 @@ export const RosterManager: React.FC<RosterManagerProps> = ({ supervisors = [], 
                     Password: <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{sup.password}</span>
                   </p>
                 </div>
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
-                  style={{ padding: '4px 10px', fontSize: '0.75rem', alignSelf: 'flex-start' }}
-                  onClick={() => handleEditSupervisor(sup)}
-                >
-                  <Edit2 size={12} style={{ marginRight: '4px' }} />
-                  <span>Assign Supervisor</span>
-                </button>
+                {isAdmin && (
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    style={{ padding: '4px 10px', fontSize: '0.75rem', alignSelf: 'flex-start' }}
+                    onClick={() => handleEditSupervisor(sup)}
+                  >
+                    <Edit2 size={12} style={{ marginRight: '4px' }} />
+                    <span>Assign Supervisor</span>
+                  </button>
+                )}
               </div>
             ))}
           </div>
