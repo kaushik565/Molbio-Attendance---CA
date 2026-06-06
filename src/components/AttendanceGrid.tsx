@@ -28,6 +28,10 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
   const [loading, setLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  // Biometric state variables
+  const [showBiometricPanel, setShowBiometricPanel] = useState(false);
+  const [biometricInput, setBiometricInput] = useState('');
 
   // Check if supervisor's access is restricted to their assigned shift
   const canMarkAllShifts = currentUser.role === 'admin' || currentUser.assigned_shift === 'All';
@@ -163,6 +167,41 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
       });
       return next;
     });
+  };
+
+  // Biometric Processing Logic
+  const handleProcessBiometric = () => {
+    if (!canMarkCurrentTab || !biometricInput.trim()) return;
+
+    // Parse pasted IDs, splitting by whitespace (spaces, newlines, tabs) or commas
+    const pastedIds = biometricInput.split(/[\s,]+/).filter(id => id.trim() !== '');
+    const pastedIdsSet = new Set(pastedIds);
+
+    let presentCount = 0;
+    let absentCount = 0;
+
+    setMarkedRecords(prev => {
+      const next = { ...prev };
+      
+      // Process employees in the currently selected shift tab
+      filteredEmployees.forEach(emp => {
+        if (currentUser.role !== 'admin' && savedRecords.has(emp.id)) return; // skip locked
+        
+        if (pastedIdsSet.has(emp.id)) {
+          next[emp.id] = 'P';
+          presentCount++;
+        } else {
+          next[emp.id] = 'A';
+          absentCount++;
+        }
+      });
+      return next;
+    });
+
+    setMessage({ type: 'success', text: `Auto-filled: ${presentCount} Present, ${absentCount} Absent.` });
+    setTimeout(() => setMessage(null), 5000);
+    setShowBiometricPanel(false);
+    setBiometricInput('');
   };
 
   // Save changes to database
@@ -393,6 +432,16 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
               className="btn btn-secondary"
+              onClick={() => setShowBiometricPanel(!showBiometricPanel)}
+              style={{ fontSize: '0.8rem', padding: '6px 12px', height: '38px', backgroundColor: showBiometricPanel ? 'var(--bg-tertiary)' : 'var(--bg-secondary)' }}
+              title="Paste employee IDs from biometric"
+            >
+              <Sparkles size={16} style={{ marginRight: '6px', color: 'var(--accent-color)' }} />
+              Auto-Fill (Paste IDs)
+            </button>
+            <span style={{ borderLeft: '1px solid var(--border-color)', margin: '0 8px', height: '24px' }}></span>
+            <button
+              className="btn btn-secondary"
               onClick={() => markSelectedStatus('P')}
               disabled={selectedEmpIds.size === 0}
               style={{ fontSize: '0.8rem', padding: '6px 12px', height: '38px' }}
@@ -427,6 +476,45 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
           </div>
         )}
       </div>
+
+      {/* Biometric Auto-Fill Panel */}
+      {showBiometricPanel && canMarkCurrentTab && (
+        <div className="glass-card" style={{ marginBottom: '20px', padding: '16px', background: 'var(--bg-secondary)', border: '1px dashed var(--border-color)' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Sparkles size={16} color="var(--accent-color)" />
+            Auto-Fill from Biometric System
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+            Paste the list of <strong>Present</strong> employee IDs below. They will be marked as Present, and all other unlisted employees in this shift will be marked as Absent.
+          </p>
+          <textarea
+            className="form-input"
+            value={biometricInput}
+            onChange={(e) => setBiometricInput(e.target.value)}
+            placeholder="e.g. 120019&#10;120356&#10;120368"
+            style={{ width: '100%', minHeight: '120px', padding: '12px', fontFamily: 'monospace', resize: 'vertical', marginBottom: '12px' }}
+          />
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setShowBiometricPanel(false);
+                setBiometricInput('');
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={handleProcessBiometric}
+              disabled={!biometricInput.trim()}
+            >
+              <CheckSquare size={16} />
+              <span>Process Attendance</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Checklist Directory */}
       <div className="glass-card" style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--card-border)' }}>
