@@ -179,22 +179,25 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
   };
 
   // Status marking handlers
-  const markSingleStatus = (empId: string, status: 'P' | 'A') => {
+  const markSingleStatus = (empId: string, status: 'P' | 'A', remarks?: string) => {
     if (!canMarkCurrentTab) return;
     if (currentUser.role !== 'admin' && savedRecords.has(empId)) return;
     setMarkedRecords(prev => ({
       ...prev,
       [empId]: status
     }));
-    // Clear remark if manually overwritten by simple toggle
     setRecordRemarks(prev => {
       const next = { ...prev };
-      delete next[empId];
+      if (remarks) {
+        next[empId] = remarks;
+      } else {
+        delete next[empId];
+      }
       return next;
     });
   };
 
-  const markSelectedStatus = (status: 'P' | 'A') => {
+  const markSelectedStatus = (status: 'P' | 'A', remarks?: string) => {
     if (!canMarkCurrentTab || selectedEmpIds.size === 0) return;
     setMarkedRecords(prev => {
       const next = { ...prev };
@@ -206,7 +209,13 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
     });
     setRecordRemarks(prev => {
       const next = { ...prev };
-      selectedEmpIds.forEach(id => { delete next[id]; });
+      selectedEmpIds.forEach(id => { 
+        if (remarks) {
+          next[id] = remarks;
+        } else {
+          delete next[id];
+        }
+      });
       return next;
     });
     setSelectedEmpIds(new Set()); // Reset selections after action
@@ -615,6 +624,15 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
             >
               Mark Selected Absent ({selectedEmpIds.size})
             </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => markSelectedStatus('A', 'Approved Leave')}
+              disabled={selectedEmpIds.size === 0}
+              style={{ fontSize: '0.8rem', padding: '6px 12px', height: '38px', color: '#eab308' }}
+              title="Mark selected employees on Approved Leave"
+            >
+              Mark Selected Leave ({selectedEmpIds.size})
+            </button>
             <span style={{ borderLeft: '1px solid var(--border-color)', margin: '0 8px', height: '24px' }}></span>
             <button
               className="btn btn-secondary"
@@ -796,13 +814,26 @@ export const AttendanceGrid: React.FC<AttendanceGridProps> = ({ currentUser, sup
                                 onClick={() => markSingleStatus(emp.id, 'A')}
                                 style={{
                                   width: '32px', height: '32px', borderRadius: '50%', border: '1px solid var(--border-color)',
-                                  background: status === 'A' ? 'var(--color-absent)' : 'var(--bg-primary)',
-                                  color: status === 'A' ? 'white' : 'var(--text-secondary)',
+                                  background: (status === 'A' && recordRemarks[emp.id] !== 'Approved Leave') ? 'var(--color-absent)' : 'var(--bg-primary)',
+                                  color: (status === 'A' && recordRemarks[emp.id] !== 'Approved Leave') ? 'white' : 'var(--text-secondary)',
                                   display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all var(--transition-fast)'
                                 }}
-                                title="Mark Absent"
+                                title="Mark Absent (Unapproved)"
                               >
                                 <X size={16} />
+                              </button>
+                              <button
+                                onClick={() => markSingleStatus(emp.id, 'A', 'Approved Leave')}
+                                style={{
+                                  width: '32px', height: '32px', borderRadius: '50%', border: '1px solid var(--border-color)',
+                                  background: (status === 'A' && recordRemarks[emp.id] === 'Approved Leave') ? '#eab308' : 'var(--bg-primary)',
+                                  color: (status === 'A' && recordRemarks[emp.id] === 'Approved Leave') ? 'white' : 'var(--text-secondary)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all var(--transition-fast)',
+                                  fontWeight: 'bold', fontSize: '14px'
+                                }}
+                                title="Mark Approved Leave"
+                              >
+                                L
                               </button>
                             </div>
                           )}

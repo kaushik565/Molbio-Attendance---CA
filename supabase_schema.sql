@@ -29,6 +29,7 @@ create table if not exists public.attendance (
   status text not null check (status in ('P', 'A')),
   marked_by text references public.profiles(id) on delete set null,
   marked_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  remarks text,
   
   -- Prevent double entries for the same employee on the same date
   unique(employee_id, date)
