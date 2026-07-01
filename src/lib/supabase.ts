@@ -654,10 +654,10 @@ export const dbService = {
             .upsert(chunk, { onConflict: 'employee_id,date' });
           if (error) throw error;
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Supabase saveAttendanceBulk failed, queuing offline sync...', err);
         this.enqueueSyncItem(date, records, userId);
-        throw new Error('OFFLINE: Network connection error. Attendance saved locally and queued for synchronization.');
+        throw new Error(`OFFLINE: Network connection error. Attendance saved locally and queued for synchronization. Details: ${err.message || 'Unknown error'}`);
       }
     } else {
       const allData = localStorage.getItem(MOCK_STORAGE_KEYS.ATTENDANCE);
